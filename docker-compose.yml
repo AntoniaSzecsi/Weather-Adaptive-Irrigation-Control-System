@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cn_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cn_project
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cn_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-weather-server:
+    build:
+      context: ./auth-weather-server
+      dockerfile: Dockerfile
+    container_name: cn_auth_weather
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/cn_project
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-your_api_key_here}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cn_network
+    volumes:
+      - ./auth-weather-server:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  sensor-service:
+    build:
+      context: ./sensor-service
+      dockerfile: Dockerfile
+    container_name: cn_sensor_service
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/cn_project
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cn_network
+    volumes:
+      - ./sensor-service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+volumes:
+  postgres_data:
+
+networks:
+  cn_network:
+    driver: bridge
